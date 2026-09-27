@@ -83,3 +83,4 @@ python_client/grpc_management_test.py
 graphify-out/
 .claude/
 CLAUDE.md
+docs/
