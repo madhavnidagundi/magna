@@ -1,0 +1,103 @@
+name: Test TDA4 Runner
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  test-tda4:
+    runs-on: [self-hosted, ti]
+    steps:
+      - name: Check system info
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          hostname
+
+      - name: Check Rust
+        run: |
+          echo "=== Rust Toolchain ==="
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+
+      - name: Check TI SDK environment
+        run: |
+          echo "=== TI SDK Environment ==="
+          echo "TI_SDK_ROOT: ${TI_SDK_ROOT:-not set}"
+          if [ -n "$TI_SDK_ROOT" ] && [ -d "$TI_SDK_ROOT" ]; then
+            ls -la "$TI_SDK_ROOT"
+          else
+            echo "Warning: TI_SDK_ROOT not set or directory not found"
+          fi
+          echo "PATH: $PATH"
+          echo "LD_LIBRARY_PATH: ${LD_LIBRARY_PATH:-not set}"
+
+      - name: Validate TI SDK dependencies for build
+        run: |
+          echo "=== TI SDK Dependency Validation ==="
+          echo "(build.rs auto-detects these paths — no sysroot env var needed)"
+          echo ""
+
+          echo "--- DLR header (dlr.h) ---"
+          dlr_found=0
+          for p in /usr/lib/python3.12/site-packages/dlr/include/dlr.h \
+                   /usr/include/dlr.h; do
+            if [ -f "$p" ]; then
+              echo "✅ $p"
+              dlr_found=1
+              break
+            fi
+          done
+          [ "$dlr_found" -eq 0 ] && echo "❌ dlr.h NOT FOUND — build will fail with linker errors"
+
+          echo ""
+          echo "--- DLR library ---"
+          if [ -f /usr/lib/libdlr.so ]; then
+            echo "✅ /usr/lib/libdlr.so → $(readlink -f /usr/lib/libdlr.so)"
+          else
+            echo "❌ /usr/lib/libdlr.so NOT FOUND"
+          fi
+
+          echo ""
+          echo "--- Edge AI SDK headers ---"
+          if [ -d /opt/edgeai-dl-inferer/dl_inferer/include ]; then
+            echo "✅ /opt/edgeai-dl-inferer/dl_inferer/include"
+            ls /opt/edgeai-dl-inferer/dl_inferer/include/ | head -10
+          else
+            echo "⚠️  /opt/edgeai-dl-inferer not found (optional)"
+          fi
+
+          echo ""
+          echo "--- Runtime libraries ---"
+          for lib in libdlr.so libvx_tidl_rt.so libcmem.so libopenvx.so; do
+            found=$(find /usr/lib -name "$lib*" 2>/dev/null | head -1)
+            if [ -n "$found" ]; then
+              echo "✅ $lib → $found"
+            else
+              echo "⚠️  $lib not in /usr/lib"
+            fi
+          done
+
+          echo ""
+          echo "--- protoc (required for gRPC) ---"
+          if command -v protoc &>/dev/null; then
+            echo "✅ protoc $(protoc --version)"
+          else
+            echo "❌ protoc not installed (apt install protobuf-compiler)"
+          fi
+
+      - name: Check proxy connectivity
+        run: |
+          echo "=== Proxy / Network ==="
+          echo "HTTP_PROXY: ${HTTP_PROXY:-not set}"
+          echo "HTTPS_PROXY: ${HTTPS_PROXY:-not set}"
+          curl -s --max-time 10 https://github.com > /dev/null && echo "GitHub reachable" || echo "GitHub NOT reachable"
+
+      - name: Test checkout
+        uses: actions/checkout@v4
+
+      - name: List repository
+        run: |
+          echo "=== Repository Contents ==="
+          ls -la
+          pwd

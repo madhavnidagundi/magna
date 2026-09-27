@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package magna;
+
+// =============================================================================
+// Magna Middleware — gRPC Inference Service
+// =============================================================================
+
+service InferenceService {
+    // Run inference on an image and return raw output tensor + optional labels.
+    rpc Infer (InferenceRequest) returns (InferenceResponse) {}
+
+    // Health check / readiness probe.
+    rpc HealthCheck (HealthRequest) returns (HealthResponse) {}
+
+    // Upload a model artifact (DLC, context binary, etc.) to the server.
+    rpc UploadModel (stream ModelChunk) returns (UploadModelResponse) {}
+
+    // Generate a QNN context binary from a deployed DLC on the device.
+    rpc PrepareContext (PrepareContextRequest) returns (PrepareContextResponse) {}
+
+    // List available models on the device.
+    rpc ListModels (ListModelsRequest) returns (ListModelsResponse) {}
+
+    // Return metadata for the currently loaded model and selected backend.
+    rpc GetModelInfo (GetModelInfoRequest) returns (GetModelInfoResponse) {}
+}
+
+// ---------------------------------------------------------------------------
+// Request
+// ---------------------------------------------------------------------------
+
+message InferenceRequest {
+    repeated InferInputTensor inputs = 1;
+    string model_name = 2;
+}
+
+message InferInputTensor {
+    string name = 1;
+    string datatype = 2;
+    repeated int64 shape = 3;
+    bytes raw_data = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Response
+// ---------------------------------------------------------------------------
+
+message InferenceResponse {
+    repeated InferOutputTensor outputs = 1;
+    float inference_time_ms = 2;
+}
+
+message InferOutputTensor {
+    string name = 1;
+    string datatype = 2;
+    repeated int64 shape = 3;
+    bytes raw_data = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Health Check
+// ---------------------------------------------------------------------------
+
+message HealthRequest {}
+
+message HealthResponse {
+    bool ready = 1;
+    string state = 2;
+    string backend = 3;
+    string model_name = 4;
+    uint64 inference_count = 5;
+}
+
+// ---------------------------------------------------------------------------
+// Model Management
+// ---------------------------------------------------------------------------
+
+// Streamed model upload — client sends chunks, server assembles the file.
+message ModelChunk {
+    // Filename to save as (e.g. "mobilenetv2_int8.dlc").
+    // Only needs to be set in the first chunk.
+    string filename = 1;
+
+    // Subdirectory under the runtime root: "models", "contexts", etc.
+    // Only needs to be set in the first chunk.
+    string target_dir = 2;
+
+    // Raw bytes of this chunk.
+    bytes data = 3;
+
+    // Total expected size in bytes (set in first chunk for progress tracking).
+    uint64 total_size = 4;
+}
+
+message UploadModelResponse {
+    bool success = 1;
+    string message = 2;
+    // Absolute path where the model was saved on the device.
+    string remote_path = 3;
+    uint64 bytes_received = 4;
+}
+
+// Context binary generation on device.
+message PrepareContextRequest {
+    // Name of the DLC file already on the device (e.g. "mobilenetv2_int8.dlc").
+    string dlc_filename = 1;
+    // Force regeneration even if context binary already exists.
+    bool force = 2;
+}
+
+message PrepareContextResponse {
+    bool success = 1;
+    string message = 2;
+    // Path to the generated context binary on device.
+    string context_path = 3;
+}
+
+// List models on the device.
+message ListModelsRequest {}
+
+message ListModelsResponse {
+    repeated ModelInfo models = 1;
+}
+
+message ModelInfo {
+    string filename = 1;
+    string path = 2;
+    uint64 size_bytes = 3;
+    // "dlc", "bin" (context binary), "onnx", etc.
+    string model_type = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Loaded model metadata
+// ---------------------------------------------------------------------------
+
+message GetModelInfoRequest {}
+
+message GetModelInfoResponse {
+    string model_name = 1;
+    string backend = 2;
+    string backend_availability = 3;
+    repeated TensorSpecInfo inputs = 4;
+    repeated TensorSpecInfo outputs = 5;
+    BackendCapabilityInfo capabilities = 6;
+}
+
+message TensorSpecInfo {
+    string name = 1;
+    string datatype = 2;
+    repeated int64 shape = 3;
+}
+
+message BackendCapabilityInfo {
+    uint64 max_inputs = 1;
+    uint64 max_outputs = 2;
+    repeated string supported_input_precisions = 3;
+    repeated string supported_output_precisions = 4;
+    bool supports_engine_building = 5;
+    bool supports_dynamic_shapes = 6;
+}

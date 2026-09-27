@@ -1,0 +1,30 @@
+# =============================================================================
+# Magna Middleware — NVIDIA Platform Requirements
+# =============================================================================
+# These must be present on the target Orin/Thor device before building with
+# --features nvidia
+#
+# Checked by: magna create_middleware --hw ORIN|THOR
+
+# CUDA Toolkit (>= 11.8)
+cuda-toolkit >= 11.8
+
+# TensorRT (>= 8.6)
+tensorrt >= 8.6
+
+# cuDNN
+cudnn >= 8.9
+
+# ONNX Runtime GPU provider
+onnxruntime-gpu >= 1.16
+
+# trtexec CLI (ships with TensorRT, used for AOT compilation)
+trtexec
+
+# System libraries
+libcudart.so
+libnvinfer.so
+libnvinfer_plugin.so
+
+# For Thor FP8 support (optional)
+# libtransformerengine.so

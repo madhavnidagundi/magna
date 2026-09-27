@@ -1,0 +1,14 @@
+numpy>=1.24.0
+opencv-python-headless>=4.10.0
+grpcio>=1.83.0
+protobuf>=7.35.1
+onnx>=1.16.0
+# Core runtime for Thor (Blackwell) support, targeting TensorRT 10+
+onnxruntime-gpu>=1.18.0
+# NVIDIA specific dependencies for TensorRT and FP8 support
+nvidia-pyindex
+nvidia-tensorrt>=10.0.0
+nvidia-transformer-engine>=1.0.0
+# Utility for GPU memory management and interaction
+pycuda>=2024.1
+psutil

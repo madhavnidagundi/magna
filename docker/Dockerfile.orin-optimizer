@@ -1,0 +1,20 @@
+# docker/Dockerfile.orin-optimizer
+# Run this ON the NVIDIA Orin hardware so the engine is built for sm_87
+FROM nvcr.io/nvidia/tensorrt:23.12-py3
+
+ARG MISAL_VERSION=v0.2.0
+
+# Install dependencies if needed
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+# Download pre-built `misal` CLI binary for aarch64 (Orin is an ARM64 system)
+# Note: In a real environment we would download the aarch64 binary. Here we mock it or 
+# assume we can download from a release.
+# RUN curl -fSL "https://github.com/Alex-MAGNA/mi-isal/releases/download/${MISAL_VERSION}/misal-aarch64-unknown-linux-gnu" -o /usr/local/bin/misal \
+#  && chmod +x /usr/local/bin/misal
+
+# For testing locally or if building from source inside container:
+COPY target/release/misal /usr/local/bin/misal
+
+# trtexec is already in PATH in the NVIDIA base image
+ENTRYPOINT ["/usr/local/bin/misal"]

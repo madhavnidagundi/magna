@@ -1,0 +1,21 @@
+# =============================================================================
+# Magna Middleware — Generic / CPU-Only Platform Requirements
+# =============================================================================
+# Minimal requirements for CPU-only inference on any Linux/Windows/macOS host.
+# Used for development, CI, and platforms without hardware accelerators.
+
+# ONNX Runtime CPU
+onnxruntime >= 1.16
+
+# Protocol Buffers compiler (for gRPC codegen)
+protoc >= 3.20
+
+# gRPC (provided by tonic in Rust, no system dependency needed)
+
+# Rust toolchain
+rustc >= 1.75
+cargo >= 1.75
+
+# Optional: for image loading
+libpng
+libjpeg

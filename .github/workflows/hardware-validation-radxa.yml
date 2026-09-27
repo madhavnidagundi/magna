@@ -1,0 +1,146 @@
+name: Radxa Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'middleware/**'
+      - 'client/**'
+      - 'misal/**'
+      - 'docker/Dockerfile.qualcomm-optimizer'
+      - 'scripts/**'
+      - 'models/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Makefile'
+      - '.github/workflows/hardware-validation-radxa.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  validate-radxa:
+    runs-on: [self-hosted, radxa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure QNN paths
+        env:
+          CONFIGURED_QAIRT_SDK_ROOT: ${{ vars.QAIRT_SDK_ROOT }}
+          CONFIGURED_QNN_SDK_ROOT: ${{ vars.QNN_SDK_ROOT }}
+          CONFIGURED_TEST_QNN_CONTEXT_PATH: ${{ vars.TEST_QNN_CONTEXT_PATH }}
+        run: |
+          set -euo pipefail
+          # Actions variables are not automatically exported to shell steps.
+          # Explicit repository configuration wins; otherwise retain service env.
+          SDK_ROOT="${CONFIGURED_QAIRT_SDK_ROOT:-${CONFIGURED_QNN_SDK_ROOT:-${QAIRT_SDK_ROOT:-${QNN_SDK_ROOT:-}}}}"
+          CONTEXT_PATH="${CONFIGURED_TEST_QNN_CONTEXT_PATH:-${TEST_QNN_CONTEXT_PATH:-}}"
+          # GITHUB_ENV's single-line format must not accept embedded newlines.
+          for value in "$SDK_ROOT" "$CONTEXT_PATH"; do
+            if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+              echo "::error::QNN SDK and context paths must be single-line absolute paths."
+              exit 1
+            fi
+            if [[ -n "$value" && "$value" != /* ]]; then
+              echo "::error::QNN SDK and context paths must be absolute paths on this runner."
+              exit 1
+            fi
+          done
+          if [[ -n "$SDK_ROOT" ]]; then
+            # Normalize both names: Rust prefers QAIRT even when it is empty.
+            printf 'QAIRT_SDK_ROOT=%s\nQNN_SDK_ROOT=%s\n' "$SDK_ROOT" "$SDK_ROOT" >> "$GITHUB_ENV"
+          fi
+          if [[ -n "$CONTEXT_PATH" ]]; then
+            printf 'TEST_QNN_CONTEXT_PATH=%s\n' "$CONTEXT_PATH" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup environment
+        run: |
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+          echo "QAIRT_SDK_ROOT=$QAIRT_SDK_ROOT"
+          echo "QNN_SDK_ROOT=$QNN_SDK_ROOT"
+
+      # Issue #54: a runner without the QAIRT SDK used to compile "successfully"
+      # by silently skipping the native QNN C++ wrapper (build.rs falls back to
+      # a warning, not an error, when include/QNN is missing), so a green
+      # workflow never actually proved native QNN execution. Fail fast and
+      # loudly here instead.
+      - name: Verify QNN SDK headers are present
+        run: |
+          SDK_ROOT="${QAIRT_SDK_ROOT:-$QNN_SDK_ROOT}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "::error::Neither QAIRT_SDK_ROOT nor QNN_SDK_ROOT is set. Configure an Actions repository variable or the runner service environment with the installed SDK's absolute path (see QUALCOMM.md, CI runner configuration). Interactive shell exports are not sufficient for a service runner."
+            exit 1
+          fi
+          if [ ! -d "$SDK_ROOT/include/QNN" ]; then
+            echo "::error::QNN headers not found at $SDK_ROOT/include/QNN — native QNN compilation would be silently skipped. Point QAIRT_SDK_ROOT/QNN_SDK_ROOT at a full QAIRT SDK install (see QUALCOMM.md)."
+            exit 1
+          fi
+          echo "QNN SDK headers found at $SDK_ROOT/include/QNN"
+
+      - name: Build middleware (qualcomm)
+        working-directory: middleware
+        run: |
+          set -euo pipefail
+          source $HOME/.cargo/env
+          cargo build --release --features qualcomm,opentelemetry 2>&1 | tee /tmp/middleware_build.log
+
+      - name: Verify native QNN configuration
+        working-directory: middleware
+        run: |
+          source $HOME/.cargo/env
+          # Assert the cfg from compiled Rust, not Cargo's normal console output.
+          cargo test --release --features qualcomm,opentelemetry --test smoke_tests smoke_test_qualcomm_native_headers_available -- --exact --nocapture
+
+      - name: Verify server binary starts
+        working-directory: middleware
+        run: |
+          source $HOME/.cargo/env
+          # Cargo resolves both the workspace target directory and CARGO_TARGET_DIR.
+          cargo run --release --features qualcomm,opentelemetry --bin magna_server -- --help
+
+      - name: Build misal CLI
+        working-directory: misal
+        run: |
+          source $HOME/.cargo/env
+          cargo build --release --features qualcomm
+
+      - name: Build client
+        working-directory: client
+        run: |
+          source $HOME/.cargo/env
+          cargo build --release
+
+      - name: Run smoke tests
+        working-directory: middleware
+        run: |
+          source $HOME/.cargo/env
+          echo "=== Running Qualcomm/Radxa backend smoke tests ==="
+          # The hardware tests share one DSP; do not run their sessions concurrently.
+          cargo test --release --features qualcomm,opentelemetry --test smoke_tests smoke_test_qualcomm -- --nocapture --test-threads=1
+          echo "✅ Smoke tests passed"
+
+      - name: Capture Qualcomm validation metadata
+        if: always()
+        run: |
+          mkdir -p /tmp/radxa-validation-artifacts
+          SDK_ROOT="${QAIRT_SDK_ROOT:-$QNN_SDK_ROOT}"
+          {
+            echo "sdk_root=$SDK_ROOT"
+            if [ -n "$SDK_ROOT" ] && [ -x "$SDK_ROOT/bin/aarch64-ubuntu-gcc11.2/qnn-net-run" ]; then
+              "$SDK_ROOT/bin/aarch64-ubuntu-gcc11.2/qnn-net-run" --version || true
+            fi
+            echo "test_qnn_context_path=${TEST_QNN_CONTEXT_PATH:-}"
+            if [ -n "${TEST_QNN_CONTEXT_PATH:-}" ] && [ -f "$TEST_QNN_CONTEXT_PATH" ]; then
+              sha256sum "$TEST_QNN_CONTEXT_PATH"
+            fi
+          } > /tmp/radxa-validation-artifacts/qualcomm-validation.txt
+          cp /tmp/middleware_build.log /tmp/radxa-validation-artifacts/middleware_build.log || true
+
+      - name: Upload Qualcomm validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radxa-qualcomm-validation
+          path: /tmp/radxa-validation-artifacts

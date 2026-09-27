@@ -1,0 +1,25 @@
+# =============================================================================
+# Magna Middleware — Configuration Example
+# =============================================================================
+# Copy this to `config.toml` and customize for your deployment.
+# Backend is selected at compile time via Cargo feature flags:
+#   cargo build --features nvidia
+#   cargo build --features cpu
+
+# Precision mode: "FP32", "FP16", "INT8", "FP8"
+precision = "FP16"
+
+# Number of warmup inference runs before timing
+warmup_runs = 3
+
+# Enable verbose debug logging
+debug = false
+
+# Path to class labels file (one label per line)
+# labels_path = "/data/imagenet_labels.txt"
+
+# Path to the model file
+# model_path = "/data/model.engine"
+
+# gRPC server listen address
+grpc_address = "[::1]:50051"

@@ -1,0 +1,91 @@
+[package]
+name = "magna-middleware"
+version = "0.2.0"
+edition = "2021"
+description = "Modular, hardware-agnostic AOT inference middleware for embedded edge AI"
+license = "MIT"
+
+[dependencies]
+# Logging & tracing (async-safe, Tokio-compatible)
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+chrono = "0.4"
+
+# Error handling
+thiserror = "2.0"
+
+# Image processing (for preprocessing)
+image = "0.25"
+
+# Concurrency
+parking_lot = "0.12"
+rayon = "1.10"
+half = { version = "2.4" }
+
+# Portable ONNX Runtime backend; `cpu-system-ort` replaces its adapter with the
+# direct C API wrapper for affected embedded boards.
+ort = { version = "2.0.0-rc.12", features = ["std", "ndarray"] }
+tempfile = "3.27.0"
+
+# Safe transmutation (replaces unsafe pointer casts)
+bytemuck = { version = "1.14", features = ["derive"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive"] }
+walkdir = "2.5"
+
+# gRPC and Async Network Layers
+tonic = "0.12"
+prost = "0.13"
+# tokio: fs/io-util/process are required by magna_server's on-device QNN
+# context-binary-generator subprocess flow (Qualcomm-specific).
+tokio = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time", "signal", "fs", "io-util", "process"] }
+opentelemetry = { version = "0.32", optional = true }
+opentelemetry_sdk = { version = "0.32", optional = true, features = ["rt-tokio"] }
+opentelemetry-stdout = { version = "0.32", optional = true, features = ["metrics"] }
+opentelemetry-prometheus = { version = "0.32", optional = true }
+prometheus = { version = "0.14", optional = true }
+axum = { version = "0.7", optional = true }
+
+[features]
+default = ["cpu"]
+nvidia = []
+cpu = []
+cpu-system-ort = ["cpu"]
+qualcomm = []
+ti = []
+mock-ti = ["ti"]
+rockchip = []
+metrics = []
+thor = []
+orin = []
+opentelemetry = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-stdout", "dep:opentelemetry-prometheus", "dep:prometheus", "dep:axum"]
+
+[[bin]]
+name = "magna"
+path = "src/main.rs"
+
+[[bin]]
+name = "magna_server"
+path = "src/bin/magna_server.rs"
+
+[[bin]]
+name = "eval_50k"
+path = "src/bin/eval_50k.rs"
+
+[build-dependencies]
+cc = "1.0"
+prost-build = "0.13"
+tonic-build = "0.12"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "inference_bench"
+harness = false

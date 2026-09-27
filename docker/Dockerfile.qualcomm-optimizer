@@ -1,0 +1,43 @@
+# docker/Dockerfile.qualcomm-optimizer
+# Run on x86 machine — .dlc and .bin outputs
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. Install Linux dependencies exactly as recommended
+RUN apt-get update && apt-get install -y \
+    python3.12 libpython3.12 python3.12-venv \
+    libc++1 libc++abi1 libatomic1 make \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Setup virtual environment with pip as recommended
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3.12 -m venv $VIRTUAL_ENV --without-pip
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+RUN python3 -m ensurepip --upgrade
+
+# 3. Install required Python packages with versions recommended by Qualcomm
+RUN pip3 install --no-cache-dir \
+    torch==2.4.1 \
+    torchvision==0.19.1 \
+    onnx==1.19.1 \
+    onnxruntime==1.23.2 \
+    onnxsim==0.6.2 \
+    pillow \
+    numpy \
+    packaging \
+    pyyaml
+
+# QAIRT SDK is mounted at /opt/qairt at runtime via docker -v
+ENV QAIRT_SDK_ROOT=/opt/qairt
+ENV QNN_SDK_ROOT=/opt/qairt
+ENV PATH="${QAIRT_SDK_ROOT}/bin/x86_64-linux-clang:${PATH}"
+ENV LD_LIBRARY_PATH="${QAIRT_SDK_ROOT}/lib/x86_64-linux-clang:${LD_LIBRARY_PATH}"
+ENV PYTHONPATH="${QAIRT_SDK_ROOT}/lib/python:${PYTHONPATH}"
+
+# Copy the automation script into the container
+COPY scripts/quantization/build_qnn_int8.py /usr/local/bin/build_qnn_int8.py
+RUN chmod +x /usr/local/bin/build_qnn_int8.py
+
+# Entrypoint expects arguments like: --onnx <file> --dataset <dir> --output_dlc <file>
+ENTRYPOINT ["python3", "/usr/local/bin/build_qnn_int8.py"]

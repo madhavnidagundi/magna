@@ -1,0 +1,26 @@
+# =============================================================================
+# Git Attributes Configuration - MAGNA Corporate
+# =============================================================================
+# This file ensures that workflow configurations always use the corporate
+# version when merging changes from external contributors (student repos).
+#
+# The 'merge=ours' strategy keeps our version during conflicts.
+
+# GitHub Workflows - Corporate CI/CD Configuration
+.github/workflows/*.yml merge=ours
+
+# Default behavior: Auto-detect text files and default to LF
+* text=auto eol=lf
+
+# Explicitly enforce LF for Rust and config files
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+
+# Protect binary files from being modified by Git
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.lock binary

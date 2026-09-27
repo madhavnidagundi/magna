@@ -1,0 +1,41 @@
+{
+    "name": "mi-isal",
+    "image": "ghcr.io/magna-global/mi-isal/develop",
+    "workspaceFolder": "/mi-isal",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/mi-isal,type=bind",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "twxs.cmake",
+                "ms-vscode.cmake-tools",
+                "ms-vscode.cpptools-extension-pack",
+                "yzhang.markdown-all-in-one",
+                "mcu-debug.debug-tracker-vscode",
+                "marus25.cortex-debug",
+                "mcu-debug.rtos-views",
+                "donjayamanne.githistory"
+            ]
+        }
+    },
+    "containerEnv": {
+        "HTTP_PROXY": "${localEnv:http_proxy}",
+        "HTTPS_PROXY": "${localEnv:https_proxy}"
+    },
+    "runArgs": [
+        "--net=host",
+        "--ipc=host",
+        "--pid=host",
+        "--device-cgroup-rule",
+        "c 189:* rmw"
+    ],
+    "mounts": [
+        "source=/dev,target=/dev,type=bind,consistency=cached",
+        "source=/sys/fs/cgroup,target=/sys/fs/cgroup,type=bind",
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached"
+    ],
+    "privileged": true,
+    "remoteUser": "vscode",
+    "initializeCommand": "echo building image; bash ${localWorkspaceFolder}/.devcontainer/build-devcontainer.sh"
+}

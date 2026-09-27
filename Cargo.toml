@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "middleware",
+    "client"
+, "misal"]
+resolver = "2"

@@ -1,0 +1,55 @@
+name: Build Orin CI Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docker/Dockerfile.orin-ci'
+      - '.github/workflows/build-orin-ci.yml'
+  workflow_dispatch:  # Allow manual rebuild
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: magna-global/mi-isal/orin-ci
+
+jobs:
+  build-and-push:
+    # Build natively on arm64 Orin runner (QEMU emulation has apt issues)
+    runs-on: [self-hosted, orin]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: echo ${{ secrets.GITHUB_TOKEN }} | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+      - name: Stage TensorRT libraries and headers from host
+        run: |
+          mkdir -p docker/trt-staging/lib docker/trt-staging/include docker/trt-staging/bin
+          cp -a /usr/lib/aarch64-linux-gnu/libnvinfer*.so*      docker/trt-staging/lib/
+          cp -a /usr/lib/aarch64-linux-gnu/libnvonnxparser*.so* docker/trt-staging/lib/
+          cp -a /usr/lib/aarch64-linux-gnu/libcudnn*.so*        docker/trt-staging/lib/
+          cp /usr/include/aarch64-linux-gnu/Nv*.h               docker/trt-staging/include/
+          cp $(which trtexec || echo /usr/src/tensorrt/bin/trtexec) docker/trt-staging/bin/
+
+      - name: Build image
+        run: |
+          docker build \
+            --network=host \
+            -f docker/Dockerfile.orin-ci \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            .
+
+      - name: Clean up staging
+        if: always()
+        run: rm -rf docker/trt-staging
+
+      - name: Push image
+        run: |
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

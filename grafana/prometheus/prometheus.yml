@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: 'magna-middleware'
+    static_configs:
+      # Scrapes the metrics-simulator container within the Docker network.
+      # When using the real middleware on the host, change to:
+      #   - targets: ['host.docker.internal:9090']
+      - targets: ['host.docker.internal:9090']

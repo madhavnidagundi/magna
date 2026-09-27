@@ -1,0 +1,38 @@
+name: Test Orin Runner
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  test-orin:
+    runs-on: [self-hosted, orin]
+    steps:
+      - name: Check system info
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          hostname
+          
+      - name: Check Rust
+        run: |
+          echo "=== Rust Toolchain ==="
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+          
+      - name: Check CUDA/TensorRT
+        run: |
+          echo "=== NVIDIA Environment ==="
+          nvidia-smi
+          echo "CUDA_ROOT: $CUDA_ROOT"
+          echo "TENSORRT_LIB: $TENSORRT_LIB"
+          ls -la /usr/local/cuda/bin/nvcc || echo "nvcc not found in PATH"
+          
+      - name: Test checkout
+        uses: actions/checkout@v4
+        
+      - name: List repository
+        run: |
+          echo "=== Repository Contents ==="
+          ls -la
+          pwd

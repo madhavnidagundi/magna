@@ -1,0 +1,107 @@
+name: Hardware Smoke Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  # ── NVIDIA TensorRT Multi-Version Testing ──────────────────────────────────
+  nvidia-smoke:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        trt_version: ["8.5.3", "8.6.1", "10.0"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build engine via Docker
+        run: |
+          # Use the base image for the specific TRT version
+          # Assuming misal-tensorrt:${{ matrix.trt_version }} is pre-built
+          docker run --gpus all --rm \
+            -v ${{ github.workspace }}:/workspace \
+            misal-tensorrt:${{ matrix.trt_version }} \
+            optimize --hw ORIN \
+            --model /workspace/models/mobilenetv4.onnx \
+            --precision int8 \
+            --calibration-cache /workspace/models/mobilenetv4_medium_calibration.cache \
+            --output /workspace/models/mobilenetv4.engine
+      - name: Smoke test
+        run: cargo test --features nvidia -- --ignored nvidia_integration
+
+  # ── RADXA Q6A (RK3588) ──────────────────────────────────────────────────────
+  # Can run on x86 CI — .rknn is cross-portable
+  radxa-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build RKNN model (portable) via Docker
+        run: |
+          docker build -t misal-radxa-optimizer:latest -f docker/Dockerfile.radxa-optimizer .
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            misal-radxa-optimizer:latest \
+            optimize --hw RADXA-Q6A \
+            --model /workspace/models/mobilenetv4.onnx \
+            --precision int8 \
+            --calibration-data /workspace/scripts/data_prep/imagenet_val_subset \
+            --output /workspace/models/mobilenetv4.rknn
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobilenetv4-rknn
+          path: models/mobilenetv4.rknn
+
+  # Deploy to RADXA for smoke test (separate job, optional)
+  radxa-smoke:
+    runs-on: [self-hosted, radxa-q6a]
+    needs: radxa-build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: mobilenetv4-rknn
+          path: models/
+      - run: |
+          cargo run --bin misal -- optimize --hw RADXA-Q6A \
+            --model models/mobilenetv4.rknn \
+            --dry-run  # just verify loading
+
+  # ── Qualcomm Snapdragon ──────────────────────────────────────────────────────
+  # Can run on x86 CI — DLC/bin is target-portable
+  qualcomm-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build QNN model
+        env:
+          QNN_SDK_ROOT: ${{ secrets.QNN_SDK_PATH }}
+        run: |
+          cargo run --bin misal -- optimize --hw SNAPDRAGON \
+            --model models/mobilenetv4.onnx \
+            --precision int8 \
+            --output /tmp/mobilenetv4.bin \
+            --dry-run
+
+  # ── TI TDA4 ─────────────────────────────────────────────────────────────────
+  ti-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build TIDL artifacts
+        env:
+          TIDL_TOOLS_PATH: ${{ secrets.TIDL_TOOLS_PATH }}
+        run: |
+          cargo run --bin misal -- optimize --hw TDA4 \
+            --model models/mobilenetv4.onnx \
+            --precision int8 \
+            --output /tmp/mobilenetv4_tidl \
+            --dry-run
+
+  # ── CPU fallback ─────────────────────────────────────────────────────────────
+  cpu-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          cargo run --bin misal -- optimize --hw CPU \
+            --model models/mobilenetv4.onnx \
+            --output /tmp/mobilenetv4_cpu.onnx

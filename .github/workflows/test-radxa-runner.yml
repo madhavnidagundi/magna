@@ -1,0 +1,60 @@
+name: Test Radxa Runner
+
+on:
+  workflow_dispatch:  # Manual trigger only
+
+jobs:
+  test-radxa:
+    runs-on: [self-hosted, radxa]
+    steps:
+      - name: Check system info
+        run: |
+          echo "=== System Info ==="
+          uname -a
+          hostname
+          df -h
+          free -h
+          
+      - name: Check Rust
+        run: |
+          echo "=== Rust Toolchain ==="
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+          
+      - name: Check Qualcomm Environment
+        run: |
+          echo "=== Qualcomm/ARM Environment ==="
+          cat /proc/cpuinfo | grep -i "model name\|processor" | head -20
+          echo "QNN_SDK_ROOT: $QNN_SDK_ROOT"
+          if [ -d "$QNN_SDK_ROOT" ]; then
+            echo "QNN SDK found at: $QNN_SDK_ROOT"
+            ls -la "$QNN_SDK_ROOT" || true
+          else
+            echo "QNN SDK not configured (expected for initial setup)"
+          fi
+          
+      - name: Check system dependencies
+        run: |
+          echo "=== System Dependencies ==="
+          protoc --version || echo "protobuf-compiler not installed"
+          nasm --version || echo "nasm not installed"
+          cmake --version || echo "cmake not installed"
+          pkg-config --version || echo "pkg-config not installed"
+          
+      - name: Test checkout
+        uses: actions/checkout@v4
+        
+      - name: List repository
+        run: |
+          echo "=== Repository Contents ==="
+          ls -la
+          pwd
+          
+      - name: Test cargo check
+        run: |
+          echo "=== Testing Cargo ==="
+          cd middleware
+          cargo --version
+          echo "Attempting cargo check (may fail if dependencies not cached)..."
+          timeout 60 cargo check --features qualcomm || echo "Cargo check timed out or failed (expected on first run)"

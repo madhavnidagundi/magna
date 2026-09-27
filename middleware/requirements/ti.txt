@@ -1,0 +1,29 @@
+# =============================================================================
+# Magna Middleware — Texas Instruments TDA4 Platform Requirements
+# =============================================================================
+# These must be present on the target TDA4/Jacinto device before building with
+# --features ti
+#
+# Checked by: magna create_middleware --hw TDA4
+
+# TI TIDL Runtime (>= 9.0)
+tidl-runtime >= 9.0
+
+# TI Edge AI SDK
+ti-edgeai-sdk >= 9.0
+
+# TI Deep Learning Library
+tidl-tools
+
+# ONNX Runtime TI EP
+onnxruntime-tidl >= 1.14
+
+# System libraries
+libtidl_rt.so
+libvx_tidl_rt.so
+
+# CMEM (Contiguous Memory Allocator for DSP zero-copy)
+libcmem.so
+
+# OpenVX (used by TI vision pipeline)
+libopenvx.so

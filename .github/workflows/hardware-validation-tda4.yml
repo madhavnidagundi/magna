@@ -1,0 +1,88 @@
+name: TDA4 Validation
+
+# Temporarily disabled
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - 'middleware/**'
+#       - 'models/**'
+#       - 'Cargo.toml'
+#       - 'Cargo.lock'
+#       - 'Makefile'
+#       - '.github/workflows/hardware-validation-tda4.yml'
+#   workflow_dispatch:  # Allow manual trigger
+on:
+  workflow_dispatch:
+
+jobs:
+  validate-tda4:
+    runs-on: [self-hosted, ti]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+          echo "TI_SDK_ROOT=${TI_SDK_ROOT:-not set}"
+
+      - name: Verify TI SDK dependencies
+        run: |
+          echo "=== Verifying TI SDK dependencies for build.rs auto-detection ==="
+          ok=1
+
+          # DLR header (checked in priority order matching build.rs)
+          dlr_found=0
+          for p in /usr/lib/python3.12/site-packages/dlr/include/dlr.h \
+                   /usr/include/dlr.h; do
+            if [ -f "$p" ]; then
+              echo "✅ DLR header: $p"
+              dlr_found=1
+              break
+            fi
+          done
+          [ "$dlr_found" -eq 0 ] && echo "❌ DLR header (dlr.h) not found" && ok=0
+
+          # DLR library
+          if [ -f /usr/lib/libdlr.so ]; then
+            echo "✅ DLR library: /usr/lib/libdlr.so"
+          else
+            echo "❌ libdlr.so not found in /usr/lib/" && ok=0
+          fi
+
+          # Edge AI SDK headers (optional but recommended)
+          if [ -d /opt/edgeai-dl-inferer/dl_inferer/include ]; then
+            echo "✅ Edge AI headers: /opt/edgeai-dl-inferer/dl_inferer/include"
+          else
+            echo "⚠️  Edge AI headers not found (optional)"
+          fi
+
+          if [ "$ok" -eq 0 ]; then
+            echo ""
+            echo "❌ Required TI SDK dependencies missing."
+            echo "   See middleware/requirements/ti.txt"
+            exit 1
+          fi
+          echo "=== All required dependencies found ==="
+
+      - name: Build middleware (ti)
+        working-directory: middleware
+        run: |
+          source $HOME/.cargo/env
+          cargo build --release --features ti
+
+      - name: Run smoke tests
+        working-directory: middleware
+        run: |
+          source $HOME/.cargo/env
+          echo "=== Running TI TDA4 backend smoke tests ==="
+          cargo test --release --features ti smoke_test -- --nocapture
+          echo "✅ Smoke tests passed"
+
+      - name: Verify binaries
+        run: |
+          ldd middleware/target/release/magna_server || true
+          ./middleware/target/release/magna_server --help || echo "Binary check complete"

@@ -1,0 +1,12 @@
+models/
+data/
+target/
+.git/
+.cargo/
+*.dlc
+*.onnx
+*.bin
+*.pth
+calib_data/
+*.engine
+*.rknn

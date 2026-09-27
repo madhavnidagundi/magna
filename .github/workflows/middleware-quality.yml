@@ -1,0 +1,132 @@
+name: Middleware Quality
+
+on:
+  pull_request:
+    paths:
+      - 'middleware/**'
+      - 'client/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
+      - 'Makefile'
+      - '.github/workflows/middleware-quality.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'middleware/**'
+      - 'client/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'deny.toml'
+      - 'Makefile'
+      - '.github/workflows/middleware-quality.yml'
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/magna-global/mi-isal/develop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check formatting
+        run: |
+          export CARGO_HOME=/home/vscode/.cargo
+          export RUSTUP_HOME=/home/vscode/.rustup
+          export PATH="/home/vscode/.cargo/bin:$PATH"
+          make fmt-check
+
+  clippy-backends:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/magna-global/mi-isal/develop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - clippy-cpu
+          - clippy-nvidia
+          - clippy-qualcomm
+          - clippy-ti
+          - clippy-cpu-metrics
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint ${{ matrix.target }}
+        run: |
+          export CARGO_HOME=/home/vscode/.cargo
+          export RUSTUP_HOME=/home/vscode/.rustup
+          export PATH="/home/vscode/.cargo/bin:$PATH"
+          make ${{ matrix.target }}
+
+  test-cpu:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/magna-global/mi-isal/develop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    needs: clippy-backends
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test CPU backend
+        run: |
+          export CARGO_HOME=/home/vscode/.cargo
+          export RUSTUP_HOME=/home/vscode/.rustup
+          export PATH="/home/vscode/.cargo/bin:$PATH"
+          make test-cpu
+
+  build-lib-backends:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/magna-global/mi-isal/develop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    needs: clippy-backends
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - build-lib-nvidia
+          - build-lib-qualcomm
+          - build-lib-ti
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ${{ matrix.target }}
+        run: |
+          export CARGO_HOME=/home/vscode/.cargo
+          export RUSTUP_HOME=/home/vscode/.rustup
+          export PATH="/home/vscode/.cargo/bin:$PATH"
+          make ${{ matrix.target }}
+
+  docs:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/magna-global/mi-isal/develop:latest
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check documentation
+        run: |
+          export CARGO_HOME=/home/vscode/.cargo
+          export RUSTUP_HOME=/home/vscode/.rustup
+          export PATH="/home/vscode/.cargo/bin:$PATH"
+          make docs

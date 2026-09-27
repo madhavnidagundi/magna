@@ -1,0 +1,97 @@
+name: Thor Validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'middleware/**'
+      - 'client/**'
+      - 'models/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'Makefile'
+      - 'docker/Dockerfile.thor-ci'
+      - '.github/workflows/hardware-validation-thor.yml'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  THOR_CI_IMAGE: ghcr.io/magna-global/mi-isal/thor-ci:latest
+  # CUDA is mounted from the host (driver compatibility).
+  # TensorRT libs and headers are baked into the CI image.
+  CUDA_HOST_PATH: /usr/local/cuda
+
+jobs:
+  validate-thor:
+    runs-on: [self-hosted, thor]
+    steps:
+      # Fix ownership of leftover build artifacts from prior Docker runs so
+      # actions/checkout can clean the workspace.  Runs as root inside the
+      # container to chown everything back to the runner user.
+      - name: Fix workspace permissions
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            ubuntu:24.04 \
+            chown -R $(id -u):$(id -g) /workspace
+
+      - uses: actions/checkout@v4
+
+      # DOCKER_RUN must be set in a step (not env: block) so $(id -u) is
+      # evaluated by the shell — env: values are literal strings.
+      - name: Set DOCKER_RUN
+        run: |
+          echo "DOCKER_RUN=docker run --runtime=nvidia --network=host --rm --user $(id -u):$(id -g) -e HOME=/workspace -e CARGO_HOME=/workspace/.cargo -e NVIDIA_VISIBLE_DEVICES=all -v /usr/local/cuda:/usr/local/cuda:ro -v /opt/mi-isal/models:/workspace/models -v ${{ github.workspace }}:/workspace" >> "$GITHUB_ENV"
+
+      - name: Pull CI image
+        run: |
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          docker pull $THOR_CI_IMAGE
+
+      - name: Verify GPU access
+        run: nvidia-smi
+
+      - name: Build middleware (nvidia)
+        run: |
+          $DOCKER_RUN -w /workspace/middleware $THOR_CI_IMAGE \
+            cargo build --release --features nvidia,thor
+
+      - name: Build misal CLI
+        run: |
+          $DOCKER_RUN -w /workspace/misal $THOR_CI_IMAGE \
+            cargo build --release --features nvidia
+
+      - name: Build client
+        run: |
+          $DOCKER_RUN -w /workspace/client $THOR_CI_IMAGE \
+            cargo build --release
+
+      - name: Optimize model (build TensorRT engine)
+        run: |
+          $DOCKER_RUN -w /workspace $THOR_CI_IMAGE \
+            ./target/release/misal optimize \
+              --model models/mobilenetv2.onnx \
+              --hw thor \
+              --precision fp16 \
+              --output models/mobilenetv2_test.engine \
+              --force
+
+      - name: Run tests
+        run: |
+          $DOCKER_RUN -w /workspace/middleware \
+            -e TEST_ENGINE_PATH=/workspace/models/mobilenetv2_test.engine \
+            $THOR_CI_IMAGE \
+            bash -c '
+              set -euo pipefail
+              echo "=== Running NVIDIA Thor tests ==="
+              cargo test --release --features nvidia,thor -- --nocapture
+              echo "✅ Tests passed"
+            '
+
+      - name: Verify binaries
+        run: |
+          $DOCKER_RUN -w /workspace $THOR_CI_IMAGE \
+            bash -c '
+              ldd middleware/target/release/magna_server || true
+              middleware/target/release/magna_server --help || echo "Binary check complete"
+            '

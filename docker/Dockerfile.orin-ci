@@ -1,0 +1,64 @@
+# docker/Dockerfile.orin-ci
+# CI image for building and testing on NVIDIA Orin/Thor (aarch64).
+# Uses Ubuntu 24.04 for glibc >= 2.38 (required by ort-sys pre-built binaries).
+# TensorRT libraries are baked in at image build time (built on the Orin runner).
+# CUDA is still mounted from the host at runtime (driver compatibility).
+#
+# Build (on the Orin runner — the build-orin-ci workflow stages TRT files first):
+#   docker build --network=host -f docker/Dockerfile.orin-ci -t ghcr.io/magna-global/mi-isal/orin-ci:latest .
+#
+# Run:
+#   docker run --gpus all --network=host --rm \
+#     -v /usr/local/cuda:/usr/local/cuda:ro \
+#     -v $(pwd):/workspace -w /workspace \
+#     ghcr.io/magna-global/mi-isal/orin-ci:latest \
+#     cargo build --release --features nvidia
+
+FROM ubuntu:24.04
+
+LABEL org.opencontainers.image.source=https://github.com/MAGNA-Global/mi-isal
+LABEL org.opencontainers.image.description="CI image for Orin/Thor hardware validation"
+
+# Install build dependencies
+RUN apt-get update && \
+    apt-get install --no-install-recommends -y \
+        build-essential cmake pkg-config \
+        protobuf-compiler \
+        libssl-dev libclang-dev clang \
+        ca-certificates curl git \
+        nasm && \
+    rm -rf /var/lib/apt/lists/*
+
+# TensorRT libraries and headers (staged by the CI workflow from the host)
+COPY docker/trt-staging/lib/     /opt/tensorrt/lib/
+COPY docker/trt-staging/include/ /opt/tensorrt/include/
+COPY docker/trt-staging/bin/     /opt/tensorrt/bin/
+
+# Ensure unversioned .so symlinks exist (the linker needs libnvinfer.so, not
+# just libnvinfer.so.8). The host may only ship versioned files if the -dev
+# package is missing, and cp dereferences symlinks.
+RUN cd /opt/tensorrt/lib && \
+    for lib in nvinfer nvinfer_plugin nvonnxparser cudnn; do \
+      if [ ! -e lib${lib}.so ] && ls lib${lib}.so.* 1>/dev/null 2>&1; then \
+        ln -sf "$(ls lib${lib}.so.* | sort -V | tail -1)" lib${lib}.so; \
+      fi; \
+    done && \
+    echo "/opt/tensorrt/lib" > /etc/ld.so.conf.d/tensorrt.conf && ldconfig
+
+# Environment — CUDA is mounted at runtime, TensorRT is baked in
+ENV CUDA_ROOT=/usr/local/cuda
+ENV PATH="/opt/tensorrt/bin:${CUDA_ROOT}/bin:${PATH}"
+ENV TENSORRT_LIB=/opt/tensorrt/lib
+ENV TENSORRT_INCLUDE=/opt/tensorrt/include
+ENV LD_LIBRARY_PATH="/opt/tensorrt/lib:/usr/local/cuda/lib64"
+
+# Install Rust toolchain (globally accessible so --user works at runtime)
+ENV RUSTUP_HOME=/opt/rust/rustup
+ENV CARGO_HOME=/opt/rust/cargo
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    chmod -R a+rX /opt/rust && \
+    /opt/rust/cargo/bin/rustup component add clippy rustfmt
+
+ENV PATH="/opt/rust/cargo/bin:${PATH}"
+
+WORKDIR /workspace

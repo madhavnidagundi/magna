@@ -1,0 +1,27 @@
+# =============================================================================
+# Magna Middleware — Qualcomm Platform Requirements
+# =============================================================================
+# Validated against the Radxa Dragon Q6A (Qualcomm QCS8550, Hexagon v68 HTP).
+# See QUALCOMM.md for the full deployment guide.
+#
+# --- Build time (target device, before building with --features qualcomm) ---
+# build.rs compiles the native QNN C++ wrapper only if it finds
+# $QAIRT_SDK_ROOT/include/QNN (or $QNN_SDK_ROOT as a legacy fallback) —
+# without it, the adapter builds but can never load an engine.
+
+# Qualcomm AI Runtime SDK (QAIRT/QNN) — validated against 2.47.0.260601
+qairt-sdk >= 2.40
+
+# --- Runtime (target device, dlopen'd by the native FFI at load_engine time) ---
+libQnnHtp.so
+libQnnHtpPrepare.so
+libQnnHtpV68Stub.so
+libQnnHtpV68Skel.so      # Hexagon v68 DSP skeleton — board-specific, not aarch64-generic
+libQnnModelDlc.so
+libQnnSystem.so
+libQnnCpu.so             # optional — CPU backend, used to isolate quant-math bugs from NPU bugs
+
+# --- Host (for the offline ONNX -> INT8 .dlc optimization pipeline) ---
+# Docker (builds docker/Dockerfile.qualcomm-optimizer, runs
+# scripts/quantization/build_qnn_int8.py — qairt-converter + qairt-quantizer)
+docker >= 20.10

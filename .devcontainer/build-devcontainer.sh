@@ -1,0 +1,1 @@
+docker build  --build-arg USER_UID=`id -u` --build-arg USER_GID=`id -g`  -f .devcontainer/Dockerfile  . -t ghcr.io/magna-global/mi-isal/develop

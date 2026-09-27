@@ -1,0 +1,85 @@
+# Python environments and caches
+venv/
+.venv/
+__pycache__/
+
+# macOS
+.DS_Store
+
+# Dataset and local artifacts
+imagenet_val/
+artifacts/
+logs/
+err.txt
+clippy.json
+clippy.txt
+doc_out.txt
+
+# Middleware build outputs and generated local checks
+middleware/target/
+middleware/magna_server_mobilenet
+middleware/check*.txt
+middleware/check_out*.txt
+middleware/check_utf8*.txt
+middleware/check_out_msvc*.txt
+middleware/clippy.json
+middleware/clippy.txt
+middleware/doc_out.txt
+imx477_links.txt
+modules.txt
+sample.jpg
+implementation_plan.md.resolved
+# Large generated model artifacts
+*.log
+*.onnx
+*.onnx.data
+*.engine
+*.plan
+*.pth
+*.cache
+*.cache.npy
+*.so
+*.pid
+scripts/data_prep/
+scripts/debug/
+
+target
+
+# Qualcomm QNN Pipeline ignored files
+.venv/
+qnn_env/
+*.dlc
+calib/
+*.docx
+magna_deploy/
+*.sha256
+
+# Pipeline / Evaluation Outputs
+*.bin
+*.raw
+*.cache
+eval_data/
+data/
+test_ctx_*/
+models/generated_ctx/
+models/calib_data/
+*input_list*.txt
+*calib_list*.txt
+output_dlc/
+output_eval/
+*.tar.gz
+*.tar
+.~lock.*
+results.txt
+
+# Superseded debug/eval scripts — replaced by Rust tooling:
+# `misal infer` (--quant-scale/--quant-offset), `misal deploy`,
+# `misal prepare-context`, and middleware/src/bin/eval_50k.rs
+python_client/single_image_inference.py
+python_client/debug_accuracy.py
+python_client/grpc_imagenet_eval.py
+python_client/grpc_management_test.py
+
+graphify-out/
+.claude/
+CLAUDE.md
